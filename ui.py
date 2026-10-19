@@ -1,194 +1,247 @@
+"""Navy + teal desktop messaging interface. Compatible with existing core.py."""
 import tkinter as tk
 from tkinter import messagebox
 from queue import Queue, Empty
 from datetime import datetime
 from core import MessagingClient
 
-BG = '#f7f8fc'
-SIDEBAR = '#edf1f8'
-WHITE = '#ffffff'
-BLUE = '#007aff'
-INK = '#1d2939'
-MUTED = '#667085'
+NAVY = '#12243A'
+NAVY_2 = '#1B344D'
+TEAL = '#087F82'
+TEAL_LIGHT = '#D9F1EF'
+BG = '#F4F7FA'
+INK = '#17283C'
+MUTED = '#687A8E'
+WHITE = '#FFFFFF'
+
 
 class MessagingUI:
     def __init__(self, root):
         self.root = root
-        root.title('Messages • Demo')
-        root.geometry('1000x660')
-        root.minsize(780, 480)
-        root.configure(bg=BG)
+        self.root.title('Syvo • Messaging Demo')
+        self.root.geometry('1000x680')
+        self.root.minsize(700, 480)
+        self.root.configure(bg=BG)
         self.events = Queue()
         self.client = None
-        self.username_value = ''
-        self.active_peer = None
-        self.conversations = {}
-        self.status = tk.StringVar(value='Not connected')
+        self.me = ''
+        self.active = None
+        self.history = {}
+        self.contacts = []
+        self.connected = False
 
-        top = tk.Frame(root, bg=WHITE, padx=15, pady=12)
-        top.pack(fill='x')
-        tk.Label(top, text='Messages', bg=WHITE, fg=INK, font=('Helvetica', 18, 'bold')).pack(side='left', padx=(0, 18))
-        tk.Label(top, text='Username', bg=WHITE, fg=MUTED).pack(side='left')
-        self.username = tk.Entry(top, width=12, relief='flat', bd=0, bg='#edf1f7', fg=INK, insertbackground=INK)
-        self.username.pack(side='left', padx=(5, 12), ipady=5)
-        tk.Label(top, text='Server IP', bg=WHITE, fg=MUTED).pack(side='left')
-        self.host = tk.Entry(top, width=14, relief='flat', bd=0, bg='#edf1f7', fg=INK, insertbackground=INK)
+        header = tk.Frame(root, bg=WHITE, height=70)
+        header.pack(side='top', fill='x')
+        header.pack_propagate(False)
+        tk.Label(header, text='◈  SYVO', bg=WHITE, fg=NAVY, font=('Helvetica', 18, 'bold')).pack(side='left', padx=(22, 18))
+        tk.Label(header, text='Username', bg=WHITE, fg=MUTED, font=('Helvetica', 10)).pack(side='left')
+        self.username = tk.Entry(header, width=12, relief='flat', bg=BG, fg=INK, font=('Helvetica', 12), insertbackground=INK)
+        self.username.pack(side='left', ipady=8, padx=(7, 14))
+        tk.Label(header, text='Server', bg=WHITE, fg=MUTED, font=('Helvetica', 10)).pack(side='left')
+        self.host = tk.Entry(header, width=13, relief='flat', bg=BG, fg=INK, font=('Helvetica', 12), insertbackground=INK)
         self.host.insert(0, '127.0.0.1')
-        self.host.pack(side='left', padx=(5, 10), ipady=5)
-        self.connect_btn = tk.Button(top, text='Connect', command=self.connect, bg=BLUE, fg=WHITE, relief='flat', padx=14, pady=5)
+        self.host.pack(side='left', ipady=8, padx=(7, 12))
+        self.connect_btn = tk.Button(header, text='Connect', command=self.connect, bg=TEAL, fg=WHITE,
+                                     activebackground=NAVY_2, activeforeground=WHITE, relief='flat',
+                                     font=('Helvetica', 11, 'bold'), padx=15, pady=7)
         self.connect_btn.pack(side='left')
-        tk.Label(top, textvariable=self.status, bg=WHITE, fg=MUTED).pack(side='right', padx=8)
+        self.status = tk.Label(header, text='● Offline', bg=WHITE, fg=MUTED, font=('Helvetica', 10))
+        self.status.pack(side='right', padx=20)
 
-        body = tk.Frame(root, bg=BG)
-        body.pack(fill='both', expand=True)
-        sidebar = tk.Frame(body, bg=SIDEBAR, width=230)
+        main = tk.Frame(root, bg=BG)
+        main.pack(fill='both', expand=True)
+        sidebar = tk.Frame(main, bg=NAVY, width=265)
         sidebar.pack(side='left', fill='y')
         sidebar.pack_propagate(False)
-        tk.Label(sidebar, text='Conversations', bg=SIDEBAR, fg=INK, font=('Helvetica', 15, 'bold')).pack(anchor='w', padx=16, pady=(20, 8))
-        self.peer_entry = tk.Entry(sidebar, relief='flat', font=('Helvetica', 12), bg=WHITE, fg=INK, insertbackground=INK)
-        self.peer_entry.pack(fill='x', padx=12, ipady=7)
-        self.peer_entry.insert(0, '')
-        self.peer_entry.bind('<Return>', lambda _e: self.add_conversation())
-        tk.Button(sidebar, text='+ New conversation', command=self.add_conversation, bg=WHITE, fg=BLUE, relief='flat', pady=7).pack(fill='x', padx=12, pady=8)
-        self.peer_list = tk.Listbox(sidebar, bg=SIDEBAR, fg=INK, selectbackground=BLUE, selectforeground=WHITE, borderwidth=0, highlightthickness=0, font=('Helvetica', 13), activestyle='none')
-        self.peer_list.pack(fill='both', expand=True, padx=8, pady=(8, 14))
-        self.peer_list.bind('<<ListboxSelect>>', self.select_peer)
-        self.peer_names = []
+        tk.Label(sidebar, text='CONVERSATIONS', bg=NAVY, fg='#AFC5D4', font=('Helvetica', 10, 'bold')).pack(anchor='w', padx=19, pady=(24, 12))
+        new_row = tk.Frame(sidebar, bg=NAVY)
+        new_row.pack(fill='x', padx=15)
+        self.recipient = tk.Entry(new_row, relief='flat', bg=NAVY_2, fg=WHITE, insertbackground=WHITE,
+                                  font=('Helvetica', 12), width=13)
+        self.recipient.pack(side='left', fill='x', expand=True, ipady=9)
+        self.recipient.bind('<Return>', lambda e: self.new_conversation())
+        tk.Button(new_row, text='+', command=self.new_conversation, bg=TEAL, fg=WHITE, relief='flat',
+                  font=('Helvetica', 17, 'bold'), width=3).pack(side='left', padx=(7, 0))
+        tk.Label(sidebar, text='Type a username and press +', bg=NAVY, fg='#8DA8B9', font=('Helvetica', 9)).pack(anchor='w', padx=18, pady=(8, 18))
+        self.contact_area = tk.Frame(sidebar, bg=NAVY)
+        self.contact_area.pack(fill='both', expand=True)
 
-        main = tk.Frame(body, bg=BG)
-        main.pack(side='left', fill='both', expand=True)
-        self.header = tk.Label(main, text='Choose or start a conversation', bg=WHITE, fg=INK, font=('Helvetica', 15, 'bold'), anchor='w', padx=18, pady=15)
-        self.header.pack(fill='x')
-        self.chat = tk.Text(main, bg=BG, state='disabled', wrap='word', borderwidth=0,
-                            highlightthickness=0, font=('Helvetica', 12), padx=22, pady=20,
-                            spacing3=8, cursor='arrow')
-        # Pack chat AFTER the composer so the composer always keeps its space.
-        self.chat.tag_configure('right', justify='right', foreground=MUTED, font=('Helvetica', 9))
-        self.chat.tag_configure('left', justify='left', foreground=MUTED, font=('Helvetica', 9))
-        self.chat.tag_configure('hint', foreground=MUTED, justify='center', spacing1=20)
-        bottom = tk.Frame(main, bg=WHITE, padx=14, pady=12)
-        bottom.pack(side='bottom', fill='x')
-        self.message = tk.Entry(bottom, relief='flat', bd=0, font=('Helvetica', 12), bg='#edf1f7', fg=INK, insertbackground=INK, highlightthickness=0)
-        self.message.pack(side='left', fill='x', expand=True, ipady=11, padx=(5, 5))
-        self.message.bind('<Return>', lambda _e: self.send())
-        tk.Button(bottom, text='Send  ➤', command=self.send, bg=BLUE, fg=WHITE, relief='flat', padx=20, pady=10, cursor='hand2').pack(side='left', padx=(10, 0))
-        self.chat.pack(side='top', fill='both', expand=True)
+        right = tk.Frame(main, bg=BG)
+        right.pack(side='left', fill='both', expand=True)
+        chat_header = tk.Frame(right, bg=WHITE, height=67)
+        chat_header.pack(side='top', fill='x')
+        chat_header.pack_propagate(False)
+        self.chat_title = tk.Label(chat_header, text='Select a conversation', bg=WHITE, fg=INK,
+                                   font=('Helvetica', 17, 'bold'))
+        self.chat_title.pack(side='left', padx=24)
+        self.chat_hint = tk.Label(chat_header, text='Private messages', bg=WHITE, fg=MUTED, font=('Helvetica', 10))
+        self.chat_hint.pack(side='right', padx=24)
+
+        # Reserve composer space before the expanding message area.
+        composer = tk.Frame(right, bg=WHITE, height=82)
+        composer.pack(side='bottom', fill='x')
+        composer.pack_propagate(False)
+        composer_inner = tk.Frame(composer, bg=WHITE)
+        composer_inner.pack(fill='both', expand=True, padx=18, pady=17)
+        self.message = tk.Entry(composer_inner, bg=BG, fg=INK, relief='flat', font=('Helvetica', 12), insertbackground=INK)
+        self.message.pack(side='left', fill='both', expand=True, ipady=10)
+        self.message.bind('<Return>', lambda e: self.send())
+        self.send_btn = tk.Button(composer_inner, text='Send  ➜', command=self.send, bg=TEAL, fg=WHITE,
+                                  activebackground=NAVY_2, activeforeground=WHITE, relief='flat',
+                                  font=('Helvetica', 11, 'bold'), padx=19)
+        self.send_btn.pack(side='right', fill='y', padx=(10, 0))
+
+        chat_holder = tk.Frame(right, bg=BG)
+        chat_holder.pack(fill='both', expand=True)
+        self.canvas = tk.Canvas(chat_holder, bg=BG, highlightthickness=0, bd=0)
+        scrollbar = tk.Scrollbar(chat_holder, orient='vertical', command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side='right', fill='y')
+        self.canvas.pack(side='left', fill='both', expand=True)
+        self.message_area = tk.Frame(self.canvas, bg=BG)
+        self.window_id = self.canvas.create_window((0, 0), window=self.message_area, anchor='nw')
+        self.message_area.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.canvas.bind('<Configure>', lambda e: self.canvas.itemconfigure(self.window_id, width=e.width))
+        self.render_chat()
         self.root.after(100, self.process_events)
         self.root.protocol('WM_DELETE_WINDOW', self.close)
 
-    def add_conversation(self, peer=None):
-        if peer is None:
-            peer = self.peer_entry.get().strip()
+    def new_conversation(self):
+        peer = self.recipient.get().strip()
         if not peer:
-            messagebox.showinfo('Recipient', 'Enter a username in the sidebar.')
             return
-        if peer == self.username_value and self.username_value:
-            messagebox.showinfo('Recipient', 'Choose another user.')
+        if peer == self.me and self.me:
+            messagebox.showwarning('Invalid recipient', 'Choose a different username')
             return
-        if peer not in self.conversations:
-            self.conversations[peer] = []
-            self.peer_names.append(peer)
-            self.peer_list.insert('end', '  ◉  ' + peer)
-        self.active_peer = peer
-        idx = self.peer_names.index(peer)
-        self.peer_list.selection_clear(0, 'end')
-        self.peer_list.selection_set(idx)
-        self.peer_list.activate(idx)
-        self.peer_entry.delete(0, 'end')
+        if peer not in self.history:
+            self.history[peer] = []
+            self.contacts.insert(0, peer)
+        self.active = peer
+        self.recipient.delete(0, 'end')
+        self.render_contacts()
         self.render_chat()
         self.message.focus_set()
 
-    def select_peer(self, _event=None):
-        selection = self.peer_list.curselection()
-        if selection:
-            self.active_peer = self.peer_names[selection[0]]
+    def render_contacts(self):
+        for child in self.contact_area.winfo_children():
+            child.destroy()
+        for peer in self.contacts:
+            selected = peer == self.active
+            bg = NAVY_2 if selected else NAVY
+            row = tk.Frame(self.contact_area, bg=bg, height=66, cursor='hand2')
+            row.pack(fill='x', pady=2, padx=8)
+            row.pack_propagate(False)
+            avatar = tk.Label(row, text=peer[:1].upper(), bg=TEAL, fg=WHITE,
+                              font=('Helvetica', 13, 'bold'), width=3, height=2)
+            avatar.pack(side='left', padx=(9, 10), pady=8)
+            details = tk.Frame(row, bg=bg)
+            details.pack(side='left', fill='both', expand=True, pady=9)
+            name = tk.Label(details, text=peer, bg=bg, fg=WHITE, font=('Helvetica', 12, 'bold'), anchor='w')
+            name.pack(fill='x')
+            preview = self.history[peer][-1]['text'] if self.history[peer] else 'Start a conversation'
+            label = tk.Label(details, text=preview[:26], bg=bg, fg='#AFC5D4', font=('Helvetica', 10), anchor='w')
+            label.pack(fill='x')
+            for widget in (row, avatar, details, name, label):
+                widget.bind('<Button-1>', lambda e, p=peer: self.select_contact(p))
+
+    def select_contact(self, peer):
+        self.active = peer
+        self.render_contacts()
+        self.render_chat()
+
+    def add_message(self, peer, sender, text):
+        if peer not in self.history:
+            self.history[peer] = []
+            self.contacts.insert(0, peer)
+        self.history[peer].append({'sender': sender, 'text': text, 'time': datetime.now().strftime('%I:%M %p').lstrip('0')})
+        self.render_contacts()
+        if self.active == peer:
             self.render_chat()
 
     def render_chat(self):
-        self.header.config(text=('●  ' + self.active_peer) if self.active_peer else 'Choose or start a conversation')
-        self.chat.config(state='normal')
-        self.chat.delete('1.0', 'end')
-        if not self.active_peer:
-            self.chat.insert('end', 'Select a conversation to get started', 'hint')
-        elif not self.conversations.get(self.active_peer):
-            self.chat.insert('end', 'No messages yet. Say hello! 👋', 'hint')
-        else:
-            for direction, content, timestamp in self.conversations[self.active_peer]:
-                outgoing = direction == 'out'
-                line = tk.Frame(self.chat, bg=BG)
-                line.columnconfigure(0, weight=1)
-                bubble = tk.Label(line, text=content, font=('Helvetica', 12),
-                                  bg=BLUE if outgoing else WHITE,
-                                  fg=WHITE if outgoing else INK,
-                                  wraplength=350, justify='left', anchor='w',
-                                  padx=15, pady=11, relief='flat', bd=0)
-                bubble.pack(side='right' if outgoing else 'left', padx=4)
-                self.chat.window_create('end', window=line, stretch=True)
-                self.chat.insert('end', '\n')
-                self.chat.insert('end', ('You' if outgoing else self.active_peer) + '  ·  ' + timestamp + '\n',
-                                 'right' if outgoing else 'left')
-                self.chat.insert('end', '\n')
-        self.chat.see('end')
-        self.chat.config(state='disabled')
-
-    def record(self, peer, direction, content):
-        if not peer:
+        for child in self.message_area.winfo_children():
+            child.destroy()
+        if not self.active:
+            self.chat_title.configure(text='Select a conversation')
+            tk.Label(self.message_area, text='Your conversations start here', bg=BG, fg=INK,
+                     font=('Helvetica', 17, 'bold')).pack(pady=(85, 8))
+            tk.Label(self.message_area, text='Enter a username on the left to begin.', bg=BG, fg=MUTED,
+                     font=('Helvetica', 11)).pack()
             return
-        if peer not in self.conversations:
-            self.add_conversation(peer)
-        self.conversations[peer].append((direction, content, datetime.now().strftime('%I:%M %p').lstrip('0')))
-        if peer == self.active_peer:
-            self.render_chat()
+        self.chat_title.configure(text=self.active)
+        items = self.history[self.active]
+        if not items:
+            tk.Label(self.message_area, text=f'Say hello to {self.active} 👋', bg=BG, fg=MUTED,
+                     font=('Helvetica', 12)).pack(pady=75)
+        for i, msg in enumerate(items):
+            mine = msg['sender'] == 'me'
+            changed = i == 0 or items[i - 1]['sender'] != msg['sender']
+            row = tk.Frame(self.message_area, bg=BG)
+            row.pack(fill='x', padx=22, pady=(19 if changed else 5, 2))
+            bubble = tk.Label(row, text=msg['text'], bg=TEAL if mine else WHITE,
+                              fg=WHITE if mine else INK, font=('Helvetica', 12),
+                              padx=15, pady=11, wraplength=390, justify='left')
+            bubble.pack(side='right' if mine else 'left')
+            last_in_group = i == len(items) - 1 or items[i + 1]['sender'] != msg['sender']
+            if last_in_group:
+                meta = tk.Frame(self.message_area, bg=BG)
+                meta.pack(fill='x', padx=25)
+                tk.Label(meta, text=('You' if mine else self.active) + '  ·  ' + msg['time'],
+                         bg=BG, fg=MUTED, font=('Helvetica', 9)).pack(side='right' if mine else 'left')
+        self.root.after_idle(lambda: self.canvas.yview_moveto(1.0))
 
     def connect(self):
-        username = self.username.get().strip()
-        if not username:
-            messagebox.showwarning('Missing username', 'Enter a username first.')
+        name = self.username.get().strip()
+        if not name:
+            messagebox.showwarning('Missing username', 'Enter a username first')
             return
         try:
-            self.client = MessagingClient(self.host.get().strip(), 5050, username, self.events.put)
+            self.client = MessagingClient(self.host.get().strip(), 5050, name, self.events.put)
+            self.me = name
+            self.connected = True
+            self.username.configure(state='disabled')
+            self.host.configure(state='disabled')
+            self.connect_btn.configure(state='disabled')
+            self.status.configure(text=f'● Connected as {name}', fg=TEAL)
         except OSError as exc:
             messagebox.showerror('Connection failed', str(exc))
-            return
-        self.username_value = username
-        self.username.config(state='disabled')
-        self.host.config(state='disabled')
-        self.connect_btn.config(state='disabled')
-        self.status.set('Connected as ' + username)
 
     def send(self):
-        if not self.client:
-            messagebox.showwarning('Not connected', 'Connect first.')
+        if not self.client or not self.connected:
+            messagebox.showwarning('Not connected', 'Connect to the server first')
             return
-        if not self.active_peer:
-            messagebox.showwarning('No conversation', 'Start a conversation in the sidebar.')
+        if not self.active:
+            messagebox.showwarning('No conversation', 'Choose a conversation first')
             return
-        content = self.message.get().strip()
-        if not content:
+        text = self.message.get().strip()
+        if not text:
             return
         try:
-            self.client.send_message(self.active_peer, content)
+            self.client.send_message(self.active, text)
+            self.add_message(self.active, 'me', text)
+            self.message.delete(0, 'end')
         except OSError as exc:
             messagebox.showerror('Send failed', str(exc))
-            return
-        self.record(self.active_peer, 'out', content)
-        self.message.delete(0, 'end')
 
     def process_events(self):
         try:
             while True:
                 event = self.events.get_nowait()
-                if event.get('type') == 'message':
-                    sender = str(event.get('from', '')).strip()
-                    if sender:
-                        self.record(sender, 'in', str(event.get('text', '')))
-                else:
-                    detail = str(event.get('text', ''))
-                    if 'Disconnected' in detail:
-                        self.status.set('Disconnected')
-                        self.client = None
-                    elif detail:
-                        self.status.set(detail)
+                kind = event.get('type')
+                if kind == 'message':
+                    peer = str(event.get('from', 'Unknown'))
+                    self.add_message(peer, peer, str(event.get('text', '')))
+                    if self.active is None:
+                        self.select_contact(peer)
+                elif kind == 'info':
+                    info = str(event.get('text', ''))
+                    if 'Disconnected from server' in info:
+                        self.connected = False
+                        self.status.configure(text='● Disconnected', fg='#BD5555')
+                    elif info.startswith('Connected as '):
+                        self.status.configure(text='● ' + info, fg=TEAL)
+                    else:
+                        self.chat_hint.configure(text=info[:45])
         except Empty:
             pass
         self.root.after(100, self.process_events)
