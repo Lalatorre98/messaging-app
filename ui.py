@@ -7,6 +7,8 @@ from queue import Queue, Empty
 from datetime import datetime
 import colorsys
 from core import MessagingClient
+from themes import THEMES, DEFAULT_THEME
+from message_bubble import MessageBubble
 
 NAVY = '#12243A'
 NAVY_2 = '#1B344D'
@@ -18,7 +20,18 @@ MUTED = '#687A8E'
 WHITE = '#FFFFFF'
 
 
+
 class MessagingUI:
+
+    def build_palette(self):
+        """Adapt the new SYVO theme to the existing UI."""
+
+        theme = self.base_theme.copy()
+
+        theme["chat"] = theme["background"]
+        theme["selected"] = theme["sidebar_alt"]
+
+        return theme
     def __init__(self, root):
         self.root = root
         self.root.title('SYVO • Messaging Demo')
@@ -32,15 +45,21 @@ class MessagingUI:
         self.history = {}
         self.contacts = []
         self.connected = False
+        self.theme_name = DEFAULT_THEME
         self.accent = TEAL
         self.settings_file = Path.home() / '.syvo_theme.json'
         self.load_theme()
-        self.palette = self.make_palette(self.accent)
+        self.base_theme= THEMES[self.theme_name].copy()
+        self.palette = self.build_palette()
 
         header = tk.Frame(root, bg=WHITE, height=70)
         header.pack(side='top', fill='x')
         header.pack_propagate(False)
-        tk.Label(header, text='◈  SYVO', bg=WHITE, fg=NAVY, font=('Helvetica', 18, 'bold')).pack(side='left', padx=(22, 18))
+
+        self.logo = tk.Label(header, text="◈  SYVO", bg=WHITE, fg=NAVY, font=("Helvetica", 18, "bold")
+        )
+        self.logo.pack(side="left", padx=(22, 18))
+
         self.username_label = tk.Label(header, text='Username', bg=WHITE, fg=MUTED, font=('Helvetica', 10))
         self.username_label.pack(side='left')
         self.username = tk.Entry(header, width=12, relief='flat', bg=BG, fg=INK, font=('Helvetica', 12), insertbackground=INK)
@@ -50,11 +69,14 @@ class MessagingUI:
         self.host = tk.Entry(header, width=13, relief='flat', bg=BG, fg=INK, font=('Helvetica', 12), insertbackground=INK)
         self.host.insert(0, '127.0.0.1')
         self.host.pack(side='left', ipady=8, padx=(7, 12))
-        self.connect_btn = tk.Button(header, text='Connect', command=self.connect, bg=TEAL, fg=WHITE,
-                                     activebackground=NAVY_2, activeforeground=WHITE, relief='flat',
-                                     font=('Helvetica', 11, 'bold'), padx=15, pady=7)
-        self.connect_btn.pack(side='left')
-        self.connect_btn.configure(bg=self.accent)
+
+        self.connect_btn = tk.Label(header, text="Connect", bg=self.accent, fg=WHITE, font=("Helvetica", 11, "bold"), padx=15, pady=10, cursor="hand2"
+        )
+
+        self.connect_btn.pack(side="left")
+        self.connect_btn.bind("<Button-1>", lambda event: self.connect())
+
+
         self.status = tk.Label(header, text='● Offline', bg=WHITE, fg=MUTED, font=('Helvetica', 10))
         self.status.pack(side='right', padx=20)
         # Connection inputs are hidden after a successful connection.
@@ -76,8 +98,23 @@ class MessagingUI:
                                   font=('Helvetica', 12), width=13)
         self.recipient.pack(side='left', fill='x', expand=True, ipady=9)
         self.recipient.bind('<Return>', lambda e: self.new_conversation())
-        self.new_btn = tk.Button(new_row, text='+', command=self.new_conversation, bg=self.accent, fg=WHITE, relief='flat',
-                  font=('Helvetica', 17, 'bold'), width=3)
+
+        self.new_btn = tk.Label(
+            new_row,
+            text="+",
+            bg=self.accent,
+            fg=WHITE,
+            font=("Helvetica", 17, "bold"),
+            width=3,
+            pady=5,
+            cursor="hand2"
+        )
+
+        self.new_btn.pack(side="left", padx=(7, 0))
+        self.new_btn.bind(
+            "<Button-1>",
+            lambda event: self.new_conversation())
+        
         self.new_btn.pack(side='left', padx=(7, 0))
         self.sidebar_help = tk.Label(sidebar, text='Type a username and press +', bg=NAVY, fg='#8DA8B9', font=('Helvetica', 9))
         self.sidebar_help.pack(anchor='w', padx=18, pady=(8, 18))
@@ -97,6 +134,8 @@ class MessagingUI:
         self.right = right
         right.pack(side='left', fill='both', expand=True)
         chat_header = tk.Frame(right, bg=WHITE, height=67)
+        self.chat_header = chat_header
+        self.header = header
         chat_header.pack(side='top', fill='x')
         chat_header.pack_propagate(False)
         self.chat_title = tk.Label(chat_header, text='Welcome to SYVO', bg=WHITE, fg=INK,
@@ -107,17 +146,32 @@ class MessagingUI:
 
         # Reserve composer space before the expanding message area.
         composer = tk.Frame(right, bg=WHITE, height=82)
+        self.composer = composer
         composer.pack(side='bottom', fill='x')
-        composer.pack_propagate(False)
+        # Allow the composer frame to follow the Text widget's requested height.
         composer_inner = tk.Frame(composer, bg=WHITE)
-        composer_inner.pack(fill='both', expand=True, padx=18, pady=17)
-        self.message = tk.Entry(composer_inner, bg=BG, fg=INK, relief='flat', font=('Helvetica', 12), insertbackground=INK)
-        self.message.pack(side='left', fill='both', expand=True, ipady=10)
-        self.message.bind('<Return>', lambda e: self.send())
-        self.send_btn = tk.Button(composer_inner, text='Send  ➜', command=self.send, bg=self.accent, fg=WHITE,
-                                  activebackground=NAVY_2, activeforeground=WHITE, relief='flat',
-                                  font=('Helvetica', 11, 'bold'), padx=19)
-        self.send_btn.pack(side='right', fill='y', padx=(10, 0))
+        self.composer_inner = composer_inner
+        composer_inner.pack(fill='x', padx=18, pady=12)
+        self.message = tk.Text(composer_inner, font=("Helvetica", 12), height=1, width=40, wrap="word",
+        undo=True,padx=12, pady=10, bd=0,highlightthickness=0)
+        self.message.pack(side='left', fill='x', expand=True)
+        self.message.bind('<Return>', self.on_message_enter)
+        self.message.bind('<<Modified>>', self.on_composer_modified)
+        self.message.edit_modified(False)
+
+        self.send_btn = tk.Label(
+            composer_inner,
+            text="Send  ➜",
+            bg=self.accent,
+            fg=WHITE,
+            font=("Helvetica", 11, "bold"),
+            padx=19,
+            pady=10,
+            cursor="hand2"
+        )
+
+        self.send_btn.pack(side="right", fill="y", padx=(10, 0))
+        self.send_btn.bind("<Button-1>", lambda event: self.send())
 
         chat_holder = tk.Frame(right, bg=BG)
         self.chat_holder = chat_holder
@@ -169,12 +223,30 @@ class MessagingUI:
 
     def apply_theme(self):
         p = self.palette
+
+        self.logo.configure(bg=p["header"], fg=p["text"])
+        self.username_label.configure(bg=p["header"], fg=p["secondary_text"])
+        self.server_label.configure(bg=p["header"], fg=p["secondary_text"])
+        self.status.configure(bg=p["header"], fg=p["accent"] if self.connected else p["secondary_text"])
+
+
+        # Midnight Blue headers and message composer
+        self.header.configure(bg=p["header"])
+        self.chat_header.configure(bg=p["header"])
+        self.composer.configure(bg=p["header"])
+        self.composer_inner.configure(bg=p["header"])
+
+        # Conversation header text
+        self.chat_title.configure(bg=p["header"], fg=p["text"])
+
+        self.chat_hint.configure(bg=p["header"], fg=p["secondary_text"])
+
         self.root.configure(bg=p['chat'])
         self.main.configure(bg=p['chat'])
         self.sidebar.configure(bg=p['sidebar'])
         self.sidebar_title.configure(bg=p['sidebar'])
         self.new_row.configure(bg=p['sidebar'])
-        self.recipient.configure(bg=p['sidebar_alt'], fg=WHITE, insertbackground=WHITE)
+        self.recipient.configure(bg=p["sidebar_alt"], fg=p["text"], insertbackground=p["text"])
         self.sidebar_help.configure(bg=p['sidebar'])
         self.theme_row.configure(bg=p['sidebar'])
         self.theme_label.configure(bg=p['sidebar'], text='PERSONALIZATION')
@@ -184,13 +256,25 @@ class MessagingUI:
         self.chat_holder.configure(bg=p['chat'])
         self.canvas.configure(bg=p['chat'])
         self.message_area.configure(bg=p['chat'])
-        self.message.configure(bg=p['input'], fg=INK, insertbackground=INK)
-        self.connect_btn.configure(bg=self.accent)
-        self.new_btn.configure(bg=self.accent)
-        self.send_btn.configure(bg=self.accent)
-        self.status.configure(fg=self.accent if self.connected else MUTED)
-        self.username.configure(bg=p['input'], highlightthickness=0, bd=0)
-        self.host.configure(bg=p['input'], highlightthickness=0, bd=0)
+
+        self.message.configure(
+        bg=p["input"],
+        fg=p["text"],
+        insertbackground=p["text"],
+        )
+       
+        self.status.configure(fg=p['accent'] if self.connected else p['secondary_text'])
+
+        for entry in (self.username, self.host):
+            entry.configure(
+            bg=p["input"],
+            fg=p["text"],
+            insertbackground=p["text"],
+            disabledforeground=p["secondary_text"],
+            highlightthickness=0,
+            bd=0
+        )
+
         self.connect_btn.configure(highlightthickness=0, bd=0, relief='flat')
         self.send_btn.configure(highlightthickness=0, bd=0, relief='flat')
         self.new_btn.configure(highlightthickness=0, bd=0, relief='flat')
@@ -356,32 +440,34 @@ class MessagingUI:
             self.chat_hint.configure(text='Your messages, your space')
             tk.Label(self.message_area, text='✦', bg=chat_bg, fg=self.accent,
                      font=('Helvetica', 34, 'bold')).pack(pady=(78, 8))
-            tk.Label(self.message_area, text='A better place to connect', bg=chat_bg, fg=INK,
+            tk.Label(self.message_area, text='A better place to connect', bg=chat_bg, fg=self.palette["text"],
                      font=('Helvetica', 19, 'bold')).pack(pady=(0, 8))
             tk.Label(self.message_area, text='Start a conversation using the sidebar, or choose an existing chat.',
-                     bg=chat_bg, fg=MUTED, font=('Helvetica', 11), wraplength=440).pack()
+                     bg=chat_bg, fg=self.palette["secondary_text"], font=('Helvetica', 11), wraplength=440).pack()
             return
         self.chat_title.configure(text='◉  ' + self.active)
         self.chat_hint.configure(text='Direct conversation')
         items = self.history[self.active]
         if not items:
-            tk.Label(self.message_area, text=f'Say hello to {self.active} 👋', bg=chat_bg, fg=MUTED,
+            tk.Label(self.message_area, text=f'Say hello to {self.active} 👋', bg=chat_bg, fg=self.palette["secondary_text"],
                      font=('Helvetica', 12)).pack(pady=75)
         for i, msg in enumerate(items):
             mine = msg['sender'] == 'me'
             changed = i == 0 or items[i - 1]['sender'] != msg['sender']
             row = tk.Frame(self.message_area, bg=chat_bg)
             row.pack(fill='x', padx=22, pady=(19 if changed else 5, 2))
-            bubble = tk.Label(row, text=msg['text'], bg=self.accent if mine else WHITE,
-                              fg=WHITE if mine else INK, font=('Helvetica', 12),
-                              padx=15, pady=11, wraplength=390, justify='left')
+            
+            bubble = MessageBubble(row, text=msg["text"],
+            background=self.palette["outgoing"] if mine else self.palette["incoming"],
+            foreground="#FFFFFF" if mine else self.palette["text"],font=("Helvetica", 12))
+
             bubble.pack(side='right' if mine else 'left')
             last_in_group = i == len(items) - 1 or items[i + 1]['sender'] != msg['sender']
             if last_in_group:
                 meta = tk.Frame(self.message_area, bg=chat_bg)
                 meta.pack(fill='x', padx=25)
                 tk.Label(meta, text=('You' if mine else self.active) + '  ·  ' + msg['time'],
-                         bg=chat_bg, fg=MUTED, font=('Helvetica', 9)).pack(side='right' if mine else 'left')
+                         bg=chat_bg, fg=self.palette["secondary_text"], font=('Helvetica', 9)).pack(side='right' if mine else 'left')
         self.root.after_idle(lambda: self.canvas.yview_moveto(1.0))
 
     def connect(self):
@@ -395,12 +481,40 @@ class MessagingUI:
             self.connected = True
             self.username.configure(state='disabled')
             self.host.configure(state='disabled')
-            self.connect_btn.configure(state='disabled')
+            # The Connect control is a Label, not a Button; it has no state option.
             for widget in (self.username_label, self.username, self.server_label, self.host, self.connect_btn):
                 widget.pack_forget()
             self.status.configure(text=f'● Connected as {name}', fg=self.accent)
         except OSError as exc:
             messagebox.showerror('Connection failed', str(exc))
+    
+    def on_message_enter(self, event):
+        if event.state & 0x0001:
+            return None  # Shift+Enter inserts a newline
+
+        self.send()
+        return "break"
+    
+
+    
+    def resize_composer(self, event=None):
+        """Resize to 1–4 displayed lines, including automatic word wrapping."""
+        if not self.message.winfo_exists():
+            return
+        self.message.update_idletasks()
+        # Text.count returns the number of display-line transitions; add one
+        # for the first line.  This also handles Shift+Enter line breaks.
+        result = self.message.count('1.0', 'end-1c', 'displaylines')
+        lines = 1 + (result[0] if result else 0)
+        lines = max(1, min(4, lines))
+        if int(self.message.cget('height')) != lines:
+            self.message.configure(height=lines)
+
+    def on_composer_modified(self, event=None):
+        if self.message.edit_modified():
+            self.message.edit_modified(False)
+            self.message.after_idle(self.resize_composer)
+
 
     def send(self):
         if not self.client or not self.connected:
@@ -409,13 +523,14 @@ class MessagingUI:
         if not self.active:
             messagebox.showwarning('No conversation', 'Choose a conversation first')
             return
-        text = self.message.get().strip()
+        text = self.message.get("1.0", "end-1c").strip()
         if not text:
             return
         try:
             self.client.send_message(self.active, text)
             self.add_message(self.active, 'me', text)
-            self.message.delete(0, 'end')
+            self.message.delete("1.0", "end")
+            self.message.configure(height=1)
         except OSError as exc:
             messagebox.showerror('Send failed', str(exc))
 
