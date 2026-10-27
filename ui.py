@@ -30,8 +30,25 @@ class MessagingUI:
 
         theme["chat"] = theme["background"]
         theme["selected"] = theme["sidebar_alt"]
-
         return theme
+    
+    def change_appearance(self, theme_name):
+
+        """Switch between SYVO's dark and light themes."""
+
+        if theme_name not in THEMES:
+            return
+
+        self.theme_name = theme_name
+        self.base_theme = THEMES[theme_name].copy()
+        self.palette = self.build_palette()
+        self.palette["accent"] = self.accent
+        self.palette["outgoing"] = self.accent
+
+
+        self.apply_theme()
+        self.save_theme()
+
     def __init__(self, root):
         self.root = root
         self.root.title('SYVO • Messaging Demo')
@@ -51,6 +68,8 @@ class MessagingUI:
         self.load_theme()
         self.base_theme= THEMES[self.theme_name].copy()
         self.palette = self.build_palette()
+        self.palette["accent"] = self.accent
+        self.palette["outgoing"] = self.accent
 
         header = tk.Frame(root, bg=WHITE, height=70)
         header.pack(side='top', fill='x')
@@ -121,9 +140,10 @@ class MessagingUI:
         theme_row = tk.Frame(sidebar, bg=NAVY)
         self.theme_row = theme_row
         theme_row.pack(fill='x', padx=16, pady=(0, 12))
+        theme_row.pack_propagate(True)
         self.theme_label = tk.Label(theme_row, text='MY COLOR', bg=NAVY, fg='#AFC5D4', font=('Helvetica', 9, 'bold'))
-        self.theme_label.pack(side='left', padx=(0, 8))
-        self.settings_btn = tk.Label(theme_row, text='⚙  Appearance settings  →', bg=NAVY_2, fg=WHITE,
+        self.theme_label.pack(anchor="w",pady=(0, 10))
+        self.settings_btn = tk.Label(theme_row, text="⚙  Appearance settings  →", bg=NAVY_2, fg=WHITE,
                                      font=('Helvetica', 11, 'bold'), padx=12, pady=10, cursor='hand2')
         self.settings_btn.pack(fill='x', expand=True)
         self.settings_btn.bind('<Button-1>', lambda e: self.open_settings())
@@ -191,13 +211,56 @@ class MessagingUI:
         self.root.protocol('WM_DELETE_WINDOW', self.close)
 
     def load_theme(self):
+        """Load saved appearance preferences."""
         try:
-            data = json.loads(self.settings_file.read_text(encoding='utf-8'))
-            color = data.get('accent', TEAL)
-            if isinstance(color, str) and len(color) == 7 and color.startswith('#'):
-                int(color[1:], 16)
-                self.accent = color
+            data = json.loads(
+                self.settings_file.read_text(encoding="utf-8")
+            )
+
+            saved_theme = data.get("theme", DEFAULT_THEME)
+            if saved_theme in THEMES:
+                self.theme_name = saved_theme
+
+            saved_accent = data.get("accent", TEAL)
+            if (
+                isinstance(saved_accent, str)
+                and len(saved_accent) == 7
+                and saved_accent.startswith("#")
+            ):
+                int(saved_accent[1:], 16)
+                self.accent = saved_accent
+
         except (OSError, ValueError, TypeError):
+            pass
+
+    def save_theme(self):
+        """Save appearance preferences."""
+        data = {
+            "theme": self.theme_name,
+            "accent": self.accent
+        }
+
+        try:
+            self.settings_file.write_text(
+                json.dumps(data, indent=4),
+                encoding="utf-8"
+            )
+        except OSError:
+            pass
+
+    def save_theme(self):
+        """Save the user's appearance mode and accent color."""
+        data = {
+            "theme": self.theme_name,
+            "accent": self.accent
+        }
+
+        try:
+            self.settings_file.write_text(
+                json.dumps(data, indent=4),
+                encoding="utf-8"
+            )
+        except OSError:
             pass
 
     def pick_color(self):
@@ -224,6 +287,12 @@ class MessagingUI:
     def apply_theme(self):
         p = self.palette
 
+        # Apply the selected accent to interactive controls
+        self.connect_btn.configure(bg=self.accent, fg="#FFFFFF")
+        self.new_btn.configure(bg=self.accent, fg="#FFFFFF")
+        self.send_btn.configure(bg=self.accent, fg="#FFFFFF")
+
+
         self.logo.configure(bg=p["header"], fg=p["text"])
         self.username_label.configure(bg=p["header"], fg=p["secondary_text"])
         self.server_label.configure(bg=p["header"], fg=p["secondary_text"])
@@ -244,24 +313,27 @@ class MessagingUI:
         self.root.configure(bg=p['chat'])
         self.main.configure(bg=p['chat'])
         self.sidebar.configure(bg=p['sidebar'])
-        self.sidebar_title.configure(bg=p['sidebar'])
+        self.sidebar_title.configure(bg=p["sidebar"], fg=p["secondary_text"])
         self.new_row.configure(bg=p['sidebar'])
         self.recipient.configure(bg=p["sidebar_alt"], fg=p["text"], insertbackground=p["text"])
-        self.sidebar_help.configure(bg=p['sidebar'])
+        self.sidebar_help.configure(bg=p["sidebar"], fg=p["secondary_text"])
         self.theme_row.configure(bg=p['sidebar'])
-        self.theme_label.configure(bg=p['sidebar'], text='PERSONALIZATION')
-        self.settings_btn.configure(bg=p['sidebar_alt'], fg=WHITE)
+        self.theme_label.configure(
+        bg=p["sidebar"],fg=p["secondary_text"], text="PERSONALIZATION")
+        self.settings_btn.configure(bg=p["sidebar_alt"], fg=p["text"])
+
         self.contact_area.configure(bg=p['sidebar'])
         self.right.configure(bg=p['chat'])
         self.chat_holder.configure(bg=p['chat'])
         self.canvas.configure(bg=p['chat'])
         self.message_area.configure(bg=p['chat'])
 
+        input_bg = (
+    "#E8EEF5" if self.theme_name == "midnight_light" else "#233A55")
+
         self.message.configure(
-        bg=p["input"],
-        fg=p["text"],
-        insertbackground=p["text"],
-        )
+            bg=input_bg,fg=p["text"],
+            insertbackground=p["text"], highlightthickness=0, bd=0, relief="flat")
        
         self.status.configure(fg=p['accent'] if self.connected else p['secondary_text'])
 
@@ -289,13 +361,18 @@ class MessagingUI:
         except (TypeError, ValueError):
             return
         self.accent = color
-        self.palette = self.make_palette(color)
-        self.apply_theme()
-        try:
-            self.settings_file.write_text(json.dumps({'accent': color}), encoding='utf-8')
-        except OSError:
-            pass
 
+        # Keep the selected Dark/Light appearance
+        self.palette = self.build_palette()
+
+        # Apply the selected accent color
+        self.palette["accent"] = color
+        self.palette["outgoing"] = color
+
+        # Refresh the interface
+        self.apply_theme()
+        self.save_theme()
+        
     def open_settings(self):
         """Independent, local appearance settings; networking is unchanged."""
         if getattr(self, '_settings_window', None) is not None:
@@ -309,13 +386,47 @@ class MessagingUI:
         window = tk.Toplevel(self.root)
         self._settings_window = window
         window.title('SYVO • Appearance')
-        window.geometry('430x480')
-        window.minsize(380, 420)
+        window.geometry("520x680")
+        window.minsize(480, 620)
         window.configure(bg=WHITE)
         window.transient(self.root)
         tk.Label(window, text='Appearance', font=('Helvetica', 21, 'bold'), bg=WHITE, fg=INK).pack(anchor='w', padx=26, pady=(25, 4))
         tk.Label(window, text='Make SYVO feel like yours. Changes apply instantly.', bg=WHITE,
                  fg=MUTED, font=('Helvetica', 11)).pack(anchor='w', padx=26, pady=(0, 20))
+        
+        # SYVO appearance mode selector
+        mode_frame = tk.Frame(window, bg=WHITE)
+        mode_frame.pack(fill="x", padx=26, pady=(0, 15))
+
+        tk.Label(
+            mode_frame,
+            text="APPEARANCE MODE",
+            bg=WHITE,
+            fg=MUTED,
+            font=("Helvetica", 10, "bold")
+        ).pack(anchor="w", pady=(0, 8))
+
+        mode_choice = tk.StringVar(value=self.theme_name)
+
+        for label, theme_key in [
+            ("🌙 Dark", "midnight_dark"),
+            ("☀ Light", "midnight_light")
+        ]:
+            tk.Radiobutton(
+                mode_frame,
+                text=label,
+                variable=mode_choice,
+                value=theme_key,
+                command=lambda: self.change_appearance(mode_choice.get()),
+                bg=WHITE,
+                fg=INK,
+                selectcolor=WHITE,
+                activebackground=WHITE,
+                font=("Helvetica", 11)
+            ).pack(side="left", padx=(0, 20))
+
+
+
         tk.Label(window, text='CHOOSE A THEME', bg=WHITE, fg=MUTED,
                  font=('Helvetica', 10, 'bold')).pack(anchor='w', padx=26, pady=(0, 8))
         colors = [('Ocean', '#087F82'), ('Midnight', '#2563EB'),
@@ -400,6 +511,9 @@ class MessagingUI:
             child.destroy()
         for peer in self.contacts:
             selected = peer == self.active
+            # Adapt contact text colors to Dark and Light Mode
+            name_color = self.palette["text"]
+            preview_color = self.palette["secondary_text"]
             bg = self.palette['selected'] if selected else self.palette['sidebar']
             row = tk.Frame(self.contact_area, bg=bg, height=66, cursor='hand2')
             row.pack(fill='x', pady=2, padx=8)
@@ -409,10 +523,10 @@ class MessagingUI:
             avatar.pack(side='left', padx=(9, 10), pady=8)
             details = tk.Frame(row, bg=bg)
             details.pack(side='left', fill='both', expand=True, pady=9)
-            name = tk.Label(details, text=peer, bg=bg, fg=WHITE, font=('Helvetica', 12, 'bold'), anchor='w')
+            name = tk.Label(details, text=peer, bg=bg, fg=name_color, font=('Helvetica', 12, 'bold'), anchor='w')
             name.pack(fill='x')
             preview = self.history[peer][-1]['text'] if self.history[peer] else 'Start a conversation'
-            label = tk.Label(details, text=preview[:26], bg=bg, fg='#AFC5D4', font=('Helvetica', 10), anchor='w')
+            label = tk.Label(details, text=preview[:26], bg=bg, fg=preview_color, font=('Helvetica', 10), anchor='w')
             label.pack(fill='x')
             for widget in (row, avatar, details, name, label):
                 widget.bind('<Button-1>', lambda e, p=peer: self.select_contact(p))
