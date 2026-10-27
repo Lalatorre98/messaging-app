@@ -9,6 +9,7 @@ import colorsys
 from core import MessagingClient
 from themes import THEMES, DEFAULT_THEME
 from message_bubble import MessageBubble
+from profile import ProfileWindow
 
 NAVY = '#12243A'
 NAVY_2 = '#1B344D'
@@ -149,6 +150,26 @@ class MessagingUI:
         self.settings_btn.bind('<Button-1>', lambda e: self.open_settings())
         self.contact_area = tk.Frame(sidebar, bg=NAVY)
         self.contact_area.pack(fill='both', expand=True)
+
+                # My Profile section
+        self.profile_row = tk.Frame(sidebar, bg=self.palette["sidebar"])
+        self.profile_row.pack(side="bottom", fill="x", padx=16, pady=(8, 16))
+
+        self.profile_btn = tk.Label(
+            self.profile_row,
+            text="◉  My Profile  →",
+            bg=self.palette["sidebar_alt"],
+            fg=self.palette["text"],
+            font=("Helvetica", 11, "bold"),
+            padx=14,
+            pady=12,
+            anchor="w",
+            cursor="hand2"
+        )
+
+        self.profile_btn.pack(fill="x")
+
+        self.profile_btn.bind("<Button-1>",lambda event: self.open_profile())
 
         right = tk.Frame(main, bg=BG)
         self.right = right
@@ -321,6 +342,12 @@ class MessagingUI:
         self.theme_label.configure(
         bg=p["sidebar"],fg=p["secondary_text"], text="PERSONALIZATION")
         self.settings_btn.configure(bg=p["sidebar_alt"], fg=p["text"])
+        # Update My Profile colors when switching themes
+        self.profile_row.configure(bg=p["sidebar"])
+        self.profile_btn.configure(
+            bg=p["sidebar_alt"],
+            fg=p["text"]
+        )
 
         self.contact_area.configure(bg=p['sidebar'])
         self.right.configure(bg=p['chat'])
@@ -372,6 +399,27 @@ class MessagingUI:
         # Refresh the interface
         self.apply_theme()
         self.save_theme()
+    
+    
+    def open_profile(self):
+        """Open one profile window at a time."""
+
+        if getattr(self, "profile_window", None) is not None:
+            try:
+                if self.profile_window.window.winfo_exists():
+                    self.profile_window.window.lift()
+                    self.profile_window.window.focus_force()
+                    return
+            except tk.TclError:
+                pass
+
+        self.profile_window = ProfileWindow(
+            parent=self.root,
+            username=self.me,
+            palette=self.palette,
+            accent=self.accent
+        )
+
         
     def open_settings(self):
         """Independent, local appearance settings; networking is unchanged."""
