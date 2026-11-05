@@ -10,6 +10,26 @@ lock = threading.Lock()
 def send(sock, payload):
     sock.sendall((json.dumps(payload) + '\n').encode('utf-8'))
 
+
+def broadcast_online_users():
+    """Notify connected clients about the current online users."""
+    with lock:
+        connected = list(clients.items())
+
+    for username, conn in connected:
+        online_users = sorted(
+            name for name, _ in connected
+            if name != username
+        )
+        try:
+            send(conn, {
+                "type": "users_list",
+                "users": online_users
+            })
+        except OSError:
+            pass
+
+
 def handle(conn):
     username = None
     try:
@@ -25,6 +45,7 @@ def handle(conn):
                 return
             clients[username] = conn
         send(conn, {'type': 'info', 'text': f'Connected as {username}'})
+        broadcast_online_users()
         
         for line in reader:
             msg = json.loads(line)
@@ -63,11 +84,21 @@ def handle(conn):
                 send(conn, {'type': 'error', 'text': f'{recipient} is not connected'})
     except (OSError, ValueError, json.JSONDecodeError):
         pass
+
     finally:
+        user_removed = False
+
         with lock:
             if username and clients.get(username) is conn:
                 del clients[username]
+                user_removed = True
+
         conn.close()
+
+        if user_removed:
+            broadcast_online_users()
+
+
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

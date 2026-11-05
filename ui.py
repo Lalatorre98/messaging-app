@@ -492,6 +492,10 @@ class MessagingUI:
     def open_find_people(self):
         """Open the SYVO user discovery window."""
 
+        # Get the latest online users when opening Find People
+        if self.client and self.connected:
+            self.client.request_users()
+
         window = tk.Toplevel(self.root)
         window.title("SYVO • Find People")
         window.geometry("420x500")
@@ -515,17 +519,25 @@ class MessagingUI:
 
 
         # Request an updated online users list
-        tk.Button(
+        
+        # Refresh Users button (macOS-compatible)
+        refresh_btn = tk.Label(
             window,
-            text="↻ Refresh Users",
+            text="↻  Refresh Users",
             bg=self.accent,
             fg="#FFFFFF",
             font=("Helvetica", 11, "bold"),
-            relief="flat",
-            cursor="hand2",
-            command=self.refresh_online_users
-        ).pack(fill="x", padx=24, pady=(18, 12))
+            padx=14,
+            pady=12,
+            cursor="hand2"
+        )
 
+        refresh_btn.pack(fill="x", padx=24, pady=(18, 12))
+
+        refresh_btn.bind(
+            "<Button-1>",
+            lambda event: self.refresh_online_users()
+        )
 
 
         # Display currently connected users
@@ -750,8 +762,22 @@ class MessagingUI:
             tk.Label(self.message_area, text='Start a conversation using the sidebar, or choose an existing chat.',
                      bg=chat_bg, fg=self.palette["secondary_text"], font=('Helvetica', 11), wraplength=440).pack()
             return
+        
+        
         self.chat_title.configure(text='◉  ' + self.active)
-        self.chat_hint.configure(text='Direct conversation')
+
+        if self.active in self.online_users:
+            self.chat_hint.configure(
+                text="● Online",
+                fg="#40C997"
+            )
+        else:
+            self.chat_hint.configure(
+                text="● Offline",
+                fg=self.palette["secondary_text"]
+            )
+
+
         items = self.history[self.active]
         if not items:
             tk.Label(self.message_area, text=f'Say hello to {self.active} 👋', bg=chat_bg, fg=self.palette["secondary_text"],
@@ -855,6 +881,7 @@ class MessagingUI:
                     self.online_users = event.get('users', [])
                     print("SYVO online users:", self.online_users)
                     self.update_find_people_list()
+                    self.render_chat()
 
                 elif kind == 'info':
                     info = str(event.get('text', ''))
