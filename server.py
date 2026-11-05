@@ -25,10 +25,28 @@ def handle(conn):
                 return
             clients[username] = conn
         send(conn, {'type': 'info', 'text': f'Connected as {username}'})
+        
         for line in reader:
             msg = json.loads(line)
+
+            if msg.get('type') == 'list_users':
+                with lock:
+                    online_users = sorted(
+                        name for name in clients
+                        if name != username
+                    )
+
+                send(conn, {
+                    'type': 'users_list',
+                    'users': online_users
+                })
+                continue
+
             if msg.get('type') != 'message':
                 continue
+
+
+
             recipient = str(msg.get('to', '')).strip()
             body = str(msg.get('text', '')).strip()
             if not recipient or not body:

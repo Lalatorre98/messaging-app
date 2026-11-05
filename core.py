@@ -28,3 +28,10 @@ class MessagingClient:
 
     def close(self):
         self.sock.close()
+    
+
+    
+    def request_users(self):
+        """Ask the server for currently connected usernames."""
+        self._send({"type": "list_users"})
+

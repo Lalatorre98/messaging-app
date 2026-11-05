@@ -62,6 +62,7 @@ class MessagingUI:
         self.active = None
         self.history = {}
         self.contacts = []
+        self.online_users = []
         self.connected = False
         self.theme_name = DEFAULT_THEME
         self.accent = TEAL
@@ -138,6 +139,22 @@ class MessagingUI:
         self.new_btn.pack(side='left', padx=(7, 0))
         self.sidebar_help = tk.Label(sidebar, text='Type a username and press +', bg=NAVY, fg='#8DA8B9', font=('Helvetica', 9))
         self.sidebar_help.pack(anchor='w', padx=18, pady=(8, 18))
+
+        # SYVO User Discovery
+        self.find_people_btn = tk.Label(
+            sidebar,
+            text="⌕  Find People",
+            bg=self.palette["sidebar_alt"],
+            fg=self.palette["text"],
+            font=("Helvetica", 11, "bold"),
+            padx=14,
+            pady=12,
+            anchor="w",
+            cursor="hand2"
+        )
+        self.find_people_btn.pack(fill="x", padx=16, pady=(0, 12))
+        self.find_people_btn.bind("<Button-1>",lambda event: self.open_find_people())
+
         theme_row = tk.Frame(sidebar, bg=NAVY)
         self.theme_row = theme_row
         theme_row.pack(fill='x', padx=16, pady=(0, 12))
@@ -342,6 +359,7 @@ class MessagingUI:
         self.theme_label.configure(
         bg=p["sidebar"],fg=p["secondary_text"], text="PERSONALIZATION")
         self.settings_btn.configure(bg=p["sidebar_alt"], fg=p["text"])
+        self.find_people_btn.configure(bg=p["sidebar_alt"], fg=p["text"])
         # Update My Profile colors when switching themes
         self.profile_row.configure(bg=p["sidebar"])
         self.profile_btn.configure(
@@ -401,6 +419,131 @@ class MessagingUI:
         self.save_theme()
     
     
+    def refresh_online_users(self):
+        """Request the latest connected users from the server."""
+        if self.client and self.connected:
+            self.client.request_users()
+        else:
+            messagebox.showwarning(
+                "Not connected",
+                "Connect to SYVO before refreshing users."
+        )
+
+
+
+    def start_discovered_conversation(self, username):
+        """Start a conversation with a discovered user."""
+
+        self.recipient.delete(0, "end")
+        self.recipient.insert(0, username)
+
+        self.new_conversation()
+
+        # Close Find People after selecting a user
+        if hasattr(self, "find_people_list"):
+            window = self.find_people_list.winfo_toplevel()
+            if window.winfo_exists():
+                window.destroy()
+
+
+
+    def update_find_people_list(self):
+        """Refresh the displayed online users."""
+
+        if not hasattr(self, "find_people_list"):
+            return
+
+        if not self.find_people_list.winfo_exists():
+            return
+
+        for widget in self.find_people_list.winfo_children():
+            widget.destroy()
+
+        if not self.online_users:
+            tk.Label(
+                self.find_people_list,
+                text="No other users are online yet.",
+                bg=self.palette["background"],
+                fg=self.palette["secondary_text"],
+                font=("Helvetica", 11)
+            ).pack(pady=30)
+        else:
+            for username in self.online_users:
+                
+                user_btn = tk.Label(
+                    self.find_people_list,
+                    text="●  " + username + "    →",
+                    bg=self.palette["sidebar_alt"],
+                    fg=self.palette["text"],
+                    font=("Helvetica", 12),
+                    anchor="w",
+                    padx=12,
+                    pady=12,
+                    cursor="hand2")
+                user_btn.pack(fill="x", pady=5)
+
+                user_btn.bind("<Button-1>",lambda event, name=username:
+                self.start_discovered_conversation(name))
+
+
+
+
+
+    def open_find_people(self):
+        """Open the SYVO user discovery window."""
+
+        window = tk.Toplevel(self.root)
+        window.title("SYVO • Find People")
+        window.geometry("420x500")
+        window.configure(bg=self.palette["background"])
+
+        tk.Label(
+            window,
+            text="Find People",
+            bg=self.palette["background"],
+            fg=self.palette["text"],
+            font=("Helvetica", 20, "bold")
+        ).pack(anchor="w", padx=24, pady=(24, 8))
+
+        tk.Label(
+            window,
+            text="Discover people connected to SYVO.",
+            bg=self.palette["background"],
+            fg=self.palette["secondary_text"],
+            font=("Helvetica", 11)
+        ).pack(anchor="w", padx=24)
+
+
+        # Request an updated online users list
+        tk.Button(
+            window,
+            text="↻ Refresh Users",
+            bg=self.accent,
+            fg="#FFFFFF",
+            font=("Helvetica", 11, "bold"),
+            relief="flat",
+            cursor="hand2",
+            command=self.refresh_online_users
+        ).pack(fill="x", padx=24, pady=(18, 12))
+
+
+
+        # Display currently connected users
+        
+        # Container for the online users list
+        self.find_people_list = tk.Frame(
+            window,
+            bg=self.palette["background"]
+        )
+        self.find_people_list.pack(fill="both", expand=True, padx=24)
+
+        self.update_find_people_list()
+
+
+
+
+
+
     def open_profile(self):
         """Open one profile window at a time."""
 
@@ -641,6 +784,7 @@ class MessagingUI:
             self.client = MessagingClient(self.host.get().strip(), 5050, name, self.events.put)
             self.me = name
             self.connected = True
+            self.client.request_users()
             self.username.configure(state='disabled')
             self.host.configure(state='disabled')
             # The Connect control is a Label, not a Button; it has no state option.
@@ -706,6 +850,12 @@ class MessagingUI:
                     self.add_message(peer, peer, str(event.get('text', '')))
                     if self.active is None:
                         self.select_contact(peer)
+
+                elif kind == 'users_list':
+                    self.online_users = event.get('users', [])
+                    print("SYVO online users:", self.online_users)
+                    self.update_find_people_list()
+
                 elif kind == 'info':
                     info = str(event.get('text', ''))
                     if 'Disconnected from server' in info:
