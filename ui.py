@@ -63,6 +63,9 @@ class MessagingUI:
         self.history = {}
         self.contacts = []
         self.online_users = []
+        self.presence_users = []
+        # User Discovery privacy setting
+        self.discovery_visible = False
         self.connected = False
         self.theme_name = DEFAULT_THEME
         self.accent = TEAL
@@ -154,6 +157,25 @@ class MessagingUI:
         )
         self.find_people_btn.pack(fill="x", padx=16, pady=(0, 12))
         self.find_people_btn.bind("<Button-1>",lambda event: self.open_find_people())
+
+        
+        self.privacy_btn = tk.Label(
+            sidebar,
+            text="🔒  Privacy Settings",
+            bg=self.palette["sidebar_alt"],
+            fg=self.palette["text"],
+            font=("Helvetica", 11, "bold"),
+            padx=14,
+            pady=12,
+            anchor="w",
+            cursor="hand2"
+        )
+        self.privacy_btn.pack(fill="x", padx=16, pady=(0, 12))
+        self.privacy_btn.bind(
+            "<Button-1>",
+            lambda event: self.open_privacy_settings()
+        )
+
 
         theme_row = tk.Frame(sidebar, bg=NAVY)
         self.theme_row = theme_row
@@ -360,6 +382,7 @@ class MessagingUI:
         bg=p["sidebar"],fg=p["secondary_text"], text="PERSONALIZATION")
         self.settings_btn.configure(bg=p["sidebar_alt"], fg=p["text"])
         self.find_people_btn.configure(bg=p["sidebar_alt"], fg=p["text"])
+        self.privacy_btn.configure(bg=p["sidebar_alt"],fg=p["text"])
         # Update My Profile colors when switching themes
         self.profile_row.configure(bg=p["sidebar"])
         self.profile_btn.configure(
@@ -551,6 +574,84 @@ class MessagingUI:
 
         self.update_find_people_list()
 
+
+
+    
+    def open_privacy_settings(self):
+        """Open SYVO's privacy settings window."""
+
+        window = tk.Toplevel(self.root)
+        window.title("SYVO • Privacy Settings")
+        window.geometry("400x300")
+        window.configure(bg=self.palette["background"])
+
+        title = tk.Label(
+            window,
+            text="Privacy Settings",
+            font=("Helvetica", 20, "bold"),
+            bg=self.palette["background"],
+            fg=self.palette["text"]
+        )
+        title.pack(anchor="w", padx=24, pady=(25, 10))
+
+        description = tk.Label(
+            window,
+            text="Control how other users discover you on SYVO.",
+            font=("Helvetica", 11),
+            bg=self.palette["background"],
+            fg=self.palette["secondary_text"],
+            wraplength=340,
+            justify="left"
+        )
+        description.pack(anchor="w", padx=24, pady=(0, 20))
+
+
+        # Discovery visibility setting
+        self.discovery_var = tk.BooleanVar(value=self.discovery_visible)
+
+
+        
+        def update_discovery_setting():
+            """Send the discovery preference to the server."""
+            if not self.client or not self.connected:
+                self.discovery_var.set(self.discovery_visible)
+                messagebox.showwarning(
+                    "Not connected",
+                    "Connect to SYVO before changing discovery settings."
+                )
+                return
+
+            visible = self.discovery_var.get()
+            self.client.set_discovery(visible)
+            print("SYVO Discovery change requested:", visible)
+
+
+
+        discovery_toggle = tk.Checkbutton(
+            window,
+            text="Appear in User Discovery",
+            variable=self.discovery_var,
+            bg=self.palette["background"],
+            fg=self.palette["text"],
+            selectcolor=self.palette["sidebar_alt"],
+            activebackground=self.palette["background"],
+            activeforeground=self.palette["text"],
+            font=("Helvetica", 12, "bold"),
+            anchor="w",
+            command=update_discovery_setting
+        )
+        discovery_toggle.pack(fill="x", padx=24, pady=(10, 5))
+
+        privacy_note = tk.Label(
+            window,
+            text="When disabled, other users cannot find you in Find People.",
+            bg=self.palette["background"],
+            fg=self.palette["secondary_text"],
+            font=("Helvetica", 10),
+            wraplength=340,
+            justify="left"
+        )
+        privacy_note.pack(anchor="w", padx=24, pady=(0, 15))
 
 
 
@@ -766,7 +867,7 @@ class MessagingUI:
         
         self.chat_title.configure(text='◉  ' + self.active)
 
-        if self.active in self.online_users:
+        if self.active in self.presence_users:
             self.chat_hint.configure(
                 text="● Online",
                 fg="#40C997"
@@ -882,6 +983,25 @@ class MessagingUI:
                     print("SYVO online users:", self.online_users)
                     self.update_find_people_list()
                     self.render_chat()
+                
+
+                elif kind == 'presence_list':
+                    self.presence_users = event.get('users', [])
+                    self.render_chat()
+
+
+                
+                elif kind == 'discovery_updated':
+                    self.discovery_visible = event.get('visible', False)
+
+                    if hasattr(self, 'discovery_var'):
+                        self.discovery_var.set(self.discovery_visible)
+
+                    print(
+                        "SYVO Discovery confirmed:",
+                        self.discovery_visible
+                    )
+
 
                 elif kind == 'info':
                     info = str(event.get('text', ''))

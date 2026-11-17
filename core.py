@@ -34,4 +34,13 @@ class MessagingClient:
     def request_users(self):
         """Ask the server for currently connected usernames."""
         self._send({"type": "list_users"})
+    
+
+    def set_discovery(self, visible: bool):
+        """Update this user's discovery visibility."""
+        self._send({
+            "type": "set_discovery",
+            "visible": visible
+        })
+
 
