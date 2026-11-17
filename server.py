@@ -14,6 +14,8 @@ lock = threading.Lock()
 discovery_visibility = {}
 
 
+
+
 def send(sock, payload):
     sock.sendall((json.dumps(payload) + '\n').encode('utf-8'))
 
@@ -41,9 +43,11 @@ def broadcast_online_users():
                 "type": "users_list",
                 "users": discoverable
             })
+            # Only broadcast discoverable users for now.
+            # Hidden users must not be exposed through presence updates.
             send(conn, {
                 "type": "presence_list",
-                "users": sorted(all_online - {username})
+                "users": sorted(visible_users - {username})
             })
         except OSError:
             pass
@@ -124,10 +128,22 @@ def handle(conn):
                 target = clients.get(recipient)
             if target:
                 try:
-                    send(target, {'type': 'message', 'from': username, 'text': body})
-                    send(conn, {'type': 'info', 'text': f'Delivered to {recipient}'})
+                    send(target, {
+                        'type': 'message',
+                        'from': username,
+                        'text': body
+                    })
+
+                    send(conn, {
+                        'type': 'info',
+                        'text': f'Delivered to {recipient}'
+                    })
+
                 except OSError:
-                    send(conn, {'type': 'error', 'text': 'Delivery failed'})
+                    send(conn, {
+                        'type': 'error',
+                        'text': 'Delivery failed'
+                    })
             else:
                 send(conn, {'type': 'error', 'text': f'{recipient} is not connected'})
     except (OSError, ValueError, json.JSONDecodeError):
